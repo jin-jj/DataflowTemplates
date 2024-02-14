@@ -15,6 +15,8 @@
  */
 package com.google.cloud.teleport.spanner.ddl;
 
+import static com.google.cloud.teleport.spanner.common.DdlUtils.quoteIdentifier;
+
 import com.google.auto.value.AutoValue;
 import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.spanner.common.SizedType;
@@ -24,7 +26,9 @@ import java.io.IOException;
 import java.io.Serializable;
 import javax.annotation.Nullable;
 
-/** Cloud Spanner column. */
+/**
+ * Cloud Spanner column.
+ */
 @AutoValue
 public abstract class Column implements Serializable {
 
@@ -70,9 +74,8 @@ public abstract class Column implements Serializable {
     if (dialect() != Dialect.GOOGLE_STANDARD_SQL && dialect() != Dialect.POSTGRESQL) {
       throw new IllegalArgumentException(String.format("Unrecognized Dialect: %s.", dialect()));
     }
-    String identifierQuote = DdlUtilityComponents.identifierQuote(dialect());
     appendable
-        .append(String.format("%1$-40s", identifierQuote + name() + identifierQuote))
+        .append(String.format("%1$-40s", quoteIdentifier(name(), dialect())))
         .append(typeString());
     if (notNull()) {
       appendable.append(" NOT NULL");
@@ -124,7 +127,9 @@ public abstract class Column implements Serializable {
     return SizedType.typeString(type(), size());
   }
 
-  /** A builder for {@link Column}. */
+  /**
+   * A builder for {@link Column}.
+   */
   @AutoValue.Builder
   public abstract static class Builder {
 

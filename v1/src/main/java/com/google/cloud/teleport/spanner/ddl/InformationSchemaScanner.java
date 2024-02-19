@@ -15,6 +15,8 @@
  */
 package com.google.cloud.teleport.spanner.ddl;
 
+import static com.google.cloud.teleport.spanner.common.DdlUtils.*;
+import static com.google.cloud.teleport.spanner.common.DdlUtils.getQualifiedName;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.quoteIdentifier;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
@@ -22,7 +24,6 @@ import com.google.cloud.spanner.Dialect;
 import com.google.cloud.spanner.ReadContext;
 import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.Statement;
-import com.google.cloud.teleport.spanner.common.DdlUtils;
 import com.google.cloud.teleport.spanner.ddl.ForeignKey.ReferentialAction;
 import com.google.cloud.teleport.spanner.proto.ExportProtos.Export;
 import com.google.common.annotations.VisibleForTesting;
@@ -33,6 +34,7 @@ import com.google.common.collect.Maps;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.apache.beam.sdk.values.KV;
 import org.slf4j.Logger;
@@ -60,6 +62,7 @@ public class InformationSchemaScanner {
   public Ddl scan() {
     Ddl.Builder builder = Ddl.builder(dialect);
     listDatabaseOptions(builder);
+    listSchemas(builder);
     listTables(builder);
     listViews(builder);
     listColumns(builder);
@@ -170,6 +173,19 @@ public class InformationSchemaScanner {
     }
   }
 
+  private void listSchemas(Ddl.Builder builder) {
+    Statement.Builder queryBuilder =
+        Statement.newBuilder(
+            "SELECT s.schema_name FROM"
+                + " information_schema.schemata AS s WHERE s.effective_timestamp IS NOT NULL");
+    ResultSet resultSet = context.executeQuery(queryBuilder.build());
+    while (resultSet.next()) {
+      String schemaName = resultSet.getString(0);
+      if (schemaName.isEmpty() || schemaName.equals("public")) continue;
+      builder.createSchema(schemaName).endNamedSchema();
+    }
+  }
+
   private void listTables(Ddl.Builder builder) {
     Statement.Builder queryBuilder;
 
@@ -179,7 +195,7 @@ public class InformationSchemaScanner {
       case GOOGLE_STANDARD_SQL:
         queryBuilder =
             Statement.newBuilder(
-                "SELECT t.table_name, t.parent_table_name, t.on_delete_action FROM"
+                "SELECT t.table_schema, t.table_name, t.parent_table_name, t.on_delete_action FROM"
                     + " information_schema.tables AS t"
                     + " WHERE v.table_schema NOT IN"
                     + " ('information_schema', 'spanner_sys')");
@@ -192,7 +208,7 @@ public class InformationSchemaScanner {
       case POSTGRESQL:
         queryBuilder =
             Statement.newBuilder(
-                "SELECT t.table_name, t.parent_table_name, t.on_delete_action FROM"
+                "SELECT t.table_schema, t.table_name, t.parent_table_name, t.on_delete_action FROM"
                     + " information_schema.tables AS t"
                     + " WHERE t.table_schema NOT IN "
                     + "('information_schema', 'spanner_sys', 'pg_catalog')");
@@ -218,9 +234,11 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(queryBuilder.build());
     while (resultSet.next()) {
-      String tableName = resultSet.getString(0);
-      String parentTableName = resultSet.isNull(1) ? null : resultSet.getString(1);
-      String onDeleteAction = resultSet.isNull(2) ? null : resultSet.getString(2);
+      String tableSchema = resultSet.getString(0);
+      String tableName = getQualifiedName(tableSchema, resultSet.getString(1));
+      // Parent table and child table has to be in same schema.
+      String parentTableName = resultSet.isNull(2) ? null : getQualifiedName(tableSchema, resultSet.getString(2));
+      String onDeleteAction = resultSet.isNull(3) ? null : resultSet.getString(3);
 
       // Error out when the parent table or on delete action are set incorrectly.
       if (Strings.isNullOrEmpty(parentTableName) != Strings.isNullOrEmpty(onDeleteAction)) {
@@ -254,20 +272,21 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(statement);
     while (resultSet.next()) {
-      String tableName = resultSet.getString(0);
+      String tableSchema = resultSet.getString(0);
+      String tableName = getQualifiedName(tableSchema, resultSet.getString(1));
       if (builder.hasView(tableName)) {
         // We do not need to collect columns from view definitions, and we will create phantom
         // tables with names that collide with views if we try.
         continue;
       }
-      String columnName = resultSet.getString(1);
-      String spannerType = resultSet.getString(3);
-      boolean nullable = resultSet.getString(4).equalsIgnoreCase("YES");
-      boolean isGenerated = resultSet.getString(5).equalsIgnoreCase("ALWAYS");
-      String generationExpression = resultSet.isNull(6) ? "" : resultSet.getString(6);
+      String columnName = resultSet.getString(2);
+      String spannerType = resultSet.getString(4);
+      boolean nullable = resultSet.getString(5).equalsIgnoreCase("YES");
+      boolean isGenerated = resultSet.getString(6).equalsIgnoreCase("ALWAYS");
+      String generationExpression = resultSet.isNull(7) ? "" : resultSet.getString(6);
       boolean isStored =
-          resultSet.isNull(7) ? false : resultSet.getString(7).equalsIgnoreCase("YES");
-      String defaultExpression = resultSet.isNull(8) ? null : resultSet.getString(8);
+          !resultSet.isNull(8) && resultSet.getString(8).equalsIgnoreCase("YES");
+      String defaultExpression = resultSet.isNull(9) ? null : resultSet.getString(8);
       builder
           .createTable(tableName)
           .column(columnName)
@@ -287,16 +306,16 @@ public class InformationSchemaScanner {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         return Statement.of(
-            "SELECT c.table_name, c.column_name,"
+            "SELECT c.table_schema, c.table_name, c.column_name,"
                 + " c.ordinal_position, c.spanner_type, c.is_nullable,"
                 + " c.is_generated, c.generation_expression, c.is_stored, c.column_default"
-                + " FROM information_schema.columns as c"
-                + " WHERE c.table_catalog = '' AND c.table_schema = '' "
+                + " WHERE v.table_schema NOT IN"
+                + " ('information_schema', 'spanner_sys')"
                 + " AND c.spanner_state = 'COMMITTED' "
                 + " ORDER BY c.table_name, c.ordinal_position");
       case POSTGRESQL:
         return Statement.of(
-            "SELECT c.table_name, c.column_name,"
+            "SELECT c.table_schema, c.table_name, c.column_name,"
                 + " c.ordinal_position, c.spanner_type, c.is_nullable,"
                 + " c.is_generated, c.generation_expression, c.is_stored, c.column_default"
                 + " FROM information_schema.columns as c"
@@ -314,25 +333,25 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(statement);
     while (resultSet.next()) {
-      String tableName = resultSet.getString(0);
-      String indexName = resultSet.getString(1);
-      String parent = resultSet.isNull(2) ? null : resultSet.getString(2);
+      String tableName = getQualifiedName(resultSet.getString(0),resultSet.getString(1));
+      String indexName = resultSet.getString(2);
+      String parent = resultSet.isNull(3) ? null : resultSet.getString(4);
       // should be NULL but is an empty string in practice.
       if (Strings.isNullOrEmpty(parent)) {
         parent = null;
       }
       boolean unique =
           (dialect == Dialect.GOOGLE_STANDARD_SQL)
-              ? resultSet.getBoolean(3)
-              : resultSet.getString(3).equalsIgnoreCase("YES");
-      boolean nullFiltered =
-          (dialect == Dialect.GOOGLE_STANDARD_SQL)
               ? resultSet.getBoolean(4)
               : resultSet.getString(4).equalsIgnoreCase("YES");
+      boolean nullFiltered =
+          (dialect == Dialect.GOOGLE_STANDARD_SQL)
+              ? resultSet.getBoolean(5)
+              : resultSet.getString(5).equalsIgnoreCase("YES");
       String filter =
-          (dialect == Dialect.GOOGLE_STANDARD_SQL || resultSet.isNull(5))
+          (dialect == Dialect.GOOGLE_STANDARD_SQL || resultSet.isNull(6))
               ? null
-              : resultSet.getString(5);
+              : resultSet.getString(6);
 
       Map<String, Index.Builder> tableIndexes =
           indexes.computeIfAbsent(tableName, k -> Maps.newTreeMap());
@@ -354,7 +373,7 @@ public class InformationSchemaScanner {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         return Statement.of(
-            "SELECT t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
+            "SELECT t.schema_name, t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
                 + " t.is_null_filtered"
                 + " FROM information_schema.indexes AS t"
                 + " WHERE v.table_schema NOT IN"
@@ -363,7 +382,7 @@ public class InformationSchemaScanner {
                 + " ORDER BY t.table_name, t.index_name");
       case POSTGRESQL:
         return Statement.of(
-            "SELECT t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
+            "SELECT t.schema_name, t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
                 + " t.is_null_filtered, t.filter FROM information_schema.indexes AS t "
                 + " WHERE t.table_schema NOT IN "
                 + " ('information_schema', 'spanner_sys', 'pg_catalog')"
@@ -380,10 +399,10 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(statement);
     while (resultSet.next()) {
-      String tableName = resultSet.getString(0);
-      String columnName = resultSet.getString(1);
-      String ordering = resultSet.isNull(2) ? null : resultSet.getString(2);
-      String indexName = resultSet.getString(3);
+      String tableName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String columnName = resultSet.getString(2);
+      String ordering = resultSet.isNull(3) ? null : resultSet.getString(3);
+      String indexName = resultSet.getString(4);
 
       if (indexName.equals("PRIMARY_KEY")) {
         IndexColumn.IndexColumnsBuilder<Table.Builder> pkBuilder =
@@ -432,14 +451,14 @@ public class InformationSchemaScanner {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         return Statement.of(
-            "SELECT t.table_name, t.column_name, t.column_ordering, t.index_name "
+            "SELECT t.table_schema, t.table_name, t.column_name, t.column_ordering, t.index_name "
                 + "FROM information_schema.index_columns AS t "
                 + " WHERE v.table_schema NOT IN"
                 + " ('information_schema', 'spanner_sys')"
                 + "ORDER BY t.table_name, t.index_name, t.ordinal_position");
       case POSTGRESQL:
         return Statement.of(
-            "SELECT t.table_name, t.column_name, t.column_ordering, t.index_name "
+            "SELECT  t.table_schema, t.table_name, t.column_name, t.column_ordering, t.index_name "
                 + "FROM information_schema.index_columns AS t "
                 + "WHERE t.table_schema NOT IN "
                 + "('information_schema', 'spanner_sys', 'pg_catalog') "
@@ -456,11 +475,11 @@ public class InformationSchemaScanner {
 
     Map<KV<String, String>, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
-      String tableName = resultSet.getString(0);
-      String columnName = resultSet.getString(1);
-      String optionName = resultSet.getString(2);
-      String optionType = resultSet.getString(3);
-      String optionValue = resultSet.getString(4);
+      String tableName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String columnName = resultSet.getString(2);
+      String optionName = resultSet.getString(3);
+      String optionType = resultSet.getString(4);
+      String optionValue = resultSet.getString(5);
 
       KV<String, String> kv = KV.of(tableName, columnName);
       ImmutableList.Builder<String> options =
@@ -470,13 +489,13 @@ public class InformationSchemaScanner {
         options.add(
             optionName
                 + "=\""
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
+                + OPTION_STRING_ESCAPER.escape(optionValue)
                 + "\"");
       } else if (optionType.equalsIgnoreCase("character varying")) {
         options.add(
             optionName
                 + "='"
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
+                + OPTION_STRING_ESCAPER.escape(optionValue)
                 + "'");
       } else {
         options.add(optionName + "=" + optionValue);
@@ -502,7 +521,7 @@ public class InformationSchemaScanner {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         return Statement.of(
-            "SELECT t.table_name, t.column_name, t.option_name, t.option_type,"
+            "SELECT t.table_schema, t.table_name, t.column_name, t.option_name, t.option_type,"
                 + " t.option_value"
                 + " FROM information_schema.column_options AS t"
                 + " WHERE v.table_schema NOT IN"
@@ -511,7 +530,7 @@ public class InformationSchemaScanner {
       case POSTGRESQL:
         // Ignore the 'allow_commit_timestamp' option since it's not user-settable in POSTGRESQL.
         return Statement.of(
-            "SELECT t.table_name, t.column_name, t.option_name, t.option_type,"
+            "SELECT t.table_schema, t.table_name, t.column_name, t.option_name, t.option_type,"
                 + " t.option_value"
                 + " FROM information_schema.column_options AS t"
                 + " WHERE t.table_schema NOT IN "
@@ -531,8 +550,10 @@ public class InformationSchemaScanner {
         statement =
             Statement.of(
                 "SELECT rc.constraint_name,"
+                    + " kcu1.table_schema,"
                     + " kcu1.table_name,"
                     + " kcu1.column_name,"
+                    + " kcu2.table_schema,"
                     + " kcu2.table_name,"
                     + " kcu2.column_name,"
                     + " rc.delete_rule"
@@ -546,20 +567,20 @@ public class InformationSchemaScanner {
                     + " AND kcu2.constraint_schema = rc.unique_constraint_schema"
                     + " AND kcu2.constraint_name = rc.unique_constraint_name"
                     + " AND kcu2.ordinal_position = kcu1.position_in_unique_constraint"
-                    + " WHERE rc.constraint_catalog = ''"
-                    + " AND rc.constraint_schema = ''"
-                    + " AND kcu1.constraint_catalog = ''"
-                    + " AND kcu1.constraint_schema = ''"
-                    + " AND kcu2.constraint_catalog = ''"
-                    + " AND kcu2.constraint_schema = ''"
+                    + " WHERE rc.constraint_catalog = kcu1.constraint_catalog"
+                    + " AND rc.constraint_catalog = kcu2.constraint_catalog"
+                    + " AND rc.constraint_schema NOT IN "
+                    + " ('information_schema', 'spanner_sys')"
                     + " ORDER BY rc.constraint_name, kcu1.ordinal_position;");
         break;
       case POSTGRESQL:
         statement =
             Statement.of(
                 "SELECT rc.constraint_name,"
+                    + " kcu1.table_schema,"
                     + " kcu1.table_name,"
                     + " kcu1.column_name,"
+                    + " kcu2.table_schema,"
                     + " kcu2.table_name,"
                     + " kcu2.column_name,"
                     + " rc.delete_rule"
@@ -577,8 +598,6 @@ public class InformationSchemaScanner {
                     + " AND rc.constraint_catalog = kcu2.constraint_catalog"
                     + " AND rc.constraint_schema NOT IN "
                     + " ('information_schema', 'spanner_sys', 'pg_catalog')"
-                    + " AND rc.constraint_schema = kcu1.constraint_schema"
-                    + " AND rc.constraint_schema = kcu2.constraint_schema"
                     + " ORDER BY rc.constraint_name, kcu1.ordinal_position;");
         break;
       default:
@@ -588,11 +607,11 @@ public class InformationSchemaScanner {
     ResultSet resultSet = context.executeQuery(statement);
     while (resultSet.next()) {
       String name = resultSet.getString(0);
-      String table = resultSet.getString(1);
-      String column = resultSet.getString(2);
-      String referencedTable = resultSet.getString(3);
-      String referencedColumn = resultSet.getString(4);
-      String deleteRule = resultSet.getString(5);
+      String table = getQualifiedName(resultSet.getString(1), resultSet.getString(2));
+      String column = resultSet.getString(3);
+      String referencedTable = getQualifiedName(resultSet.getString(4), resultSet.getString(5));
+      String referencedColumn = resultSet.getString(6);
+      String deleteRule = resultSet.getString(7);
       Map<String, ForeignKey.Builder> tableForeignKeys =
           foreignKeys.computeIfAbsent(table, k -> Maps.newTreeMap());
       ForeignKey.Builder foreignKey =
@@ -621,7 +640,8 @@ public class InformationSchemaScanner {
       case GOOGLE_STANDARD_SQL:
         statement =
             Statement.of(
-                "SELECT ctu.TABLE_NAME,"
+                "SELECT ctu.TABLE_SCHEMA,"
+                    + "ctu.TABLE_NAME,"
                     + " cc.CONSTRAINT_NAME,"
                     + " cc.CHECK_CLAUSE"
                     + " FROM INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE as ctu"
@@ -630,16 +650,15 @@ public class InformationSchemaScanner {
                     + " AND ctu.constraint_schema = cc.constraint_schema"
                     + " AND ctu.CONSTRAINT_NAME = cc.CONSTRAINT_NAME"
                     + " WHERE NOT STARTS_WITH(cc.CONSTRAINT_NAME, 'CK_IS_NOT_NULL_')"
-                    + " AND ctu.table_catalog = ''"
-                    + " AND ctu.table_schema = ''"
-                    + " AND ctu.constraint_catalog = ''"
-                    + " AND ctu.constraint_schema = ''"
+                    + " AND ctu.table_schema NOT IN"
+                    + " ('information_schema', 'spanner_sys')"
                     + " AND cc.SPANNER_STATE = 'COMMITTED';");
         break;
       case POSTGRESQL:
         statement =
             Statement.of(
-                "SELECT ctu.TABLE_NAME,"
+                "SELECT ctu.TABLE_SCHEMA,"
+                    + "ctu.TABLE_NAME,"
                     + " cc.CONSTRAINT_NAME,"
                     + " cc.CHECK_CLAUSE"
                     + " FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS as ctu"
@@ -648,10 +667,8 @@ public class InformationSchemaScanner {
                     + " AND ctu.constraint_schema = cc.constraint_schema"
                     + " AND ctu.CONSTRAINT_NAME = cc.CONSTRAINT_NAME"
                     + " WHERE NOT STARTS_WITH(cc.CONSTRAINT_NAME, 'CK_IS_NOT_NULL_')"
-                    + " AND ctu.table_catalog = ctu.constraint_catalog"
                     + " AND ctu.table_schema NOT IN"
                     + "('information_schema', 'spanner_sys', 'pg_catalog')"
-                    + " AND ctu.table_schema = ctu.constraint_schema"
                     + " AND cc.SPANNER_STATE = 'COMMITTED';");
         break;
       default:
@@ -660,9 +677,9 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(statement);
     while (resultSet.next()) {
-      String table = resultSet.getString(0);
-      String name = resultSet.getString(1);
-      String expression = resultSet.getString(2);
+      String table = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String name = resultSet.getString(2);
+      String expression = resultSet.getString(3);
       Map<String, CheckConstraint> tableCheckConstraints =
           checkConstraints.computeIfAbsent(table, k -> Maps.newTreeMap());
       tableCheckConstraints.computeIfAbsent(
@@ -679,7 +696,7 @@ public class InformationSchemaScanner {
       case GOOGLE_STANDARD_SQL:
         queryStatement =
             Statement.of(
-                "SELECT v.table_name, v.view_definition, v.security_type"
+                "SELECT v.table_schema, v.table_name, v.view_definition, v.security_type"
                     + " FROM information_schema.views AS v"
                     + " WHERE v.table_schema NOT IN"
                     + " ('information_schema', 'spanner_sys')");
@@ -693,7 +710,7 @@ public class InformationSchemaScanner {
       case POSTGRESQL:
         queryStatement =
             Statement.of(
-                "SELECT v.table_name, v.view_definition, v.security_type"
+                "SELECT v.table_schema, v.table_name, v.view_definition, v.security_type"
                     + " FROM information_schema.views AS v"
                     + " WHERE v.table_schema NOT IN"
                     + " ('information_schema', 'spanner_sys', 'pg_catalog')");
@@ -719,9 +736,9 @@ public class InformationSchemaScanner {
     ResultSet resultSet = context.executeQuery(queryStatement);
 
     while (resultSet.next()) {
-      String viewName = resultSet.getString(0);
-      String viewQuery = resultSet.getString(1);
-      String viewSecurityType = resultSet.getString(2);
+      String viewName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String viewQuery = resultSet.getString(2);
+      String viewSecurityType = resultSet.getString(3);
       LOG.debug("Schema View {}", viewName);
       builder
           .createView(viewName)
@@ -740,12 +757,13 @@ public class InformationSchemaScanner {
     ResultSet resultSet =
         context.executeQuery(
             Statement.of(
-                "SELECT t.model_name, t.is_remote "
+                "SELECT t.model_schema, t.model_name, t.is_remote "
                     + " FROM information_schema.models AS t"
-                    + " WHERE t.model_catalog = '' AND t.model_schema = ''"));
+                    + " WHERE t.model_schema NOT IN"
+                    + " ('information_schema', 'spanner_sys')"));
     while (resultSet.next()) {
-      String modelName = resultSet.getString(0);
-      boolean remote = resultSet.isNull(1) ? false : resultSet.getBoolean(1);
+      String modelName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      boolean remote = resultSet.isNull(1) ? false : resultSet.getBoolean(2);
       LOG.debug("Schema Model {} Remote {} {}", modelName, remote);
       builder.createModel(modelName).remote(remote).endModel();
     }
@@ -755,17 +773,18 @@ public class InformationSchemaScanner {
     ResultSet resultSet =
         context.executeQuery(
             Statement.of(
-                "SELECT t.model_name, t.option_name, t.option_type, t.option_value "
+                "SELECT t.model_schema, t.model_name, t.option_name, t.option_type, t.option_value "
                     + " FROM information_schema.model_options AS t"
-                    + " WHERE t.model_catalog = '' AND t.model_schema = ''"
+                    + " WHERE t.model_schema NOT IN"
+                    + " ('information_schema', 'spanner_sys')"
                     + " ORDER BY t.model_name, t.option_name"));
 
     Map<String, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
-      String modelName = resultSet.getString(0);
-      String optionName = resultSet.getString(1);
-      String optionType = resultSet.getString(2);
-      String optionValue = resultSet.getString(3);
+      String modelName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String optionName = resultSet.getString(2);
+      String optionType = resultSet.getString(3);
+      String optionValue = resultSet.getString(4);
 
       ImmutableList.Builder<String> options =
           allOptions.computeIfAbsent(modelName, k -> ImmutableList.builder());
@@ -774,16 +793,16 @@ public class InformationSchemaScanner {
         options.add(
             optionName
                 + "="
-                + DdlUtils.GSQL_LITERAL_QUOTE
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
-                + DdlUtils.GSQL_LITERAL_QUOTE);
+                + GSQL_LITERAL_QUOTE
+                + OPTION_STRING_ESCAPER.escape(optionValue)
+                + GSQL_LITERAL_QUOTE);
       } else if (optionType.equalsIgnoreCase("character varying")) {
         options.add(
             optionName
                 + "="
-                + DdlUtils.POSTGRESQL_LITERAL_QUOTE
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
-                + DdlUtils.POSTGRESQL_LITERAL_QUOTE);
+                + POSTGRESQL_LITERAL_QUOTE
+                + OPTION_STRING_ESCAPER.escape(optionValue)
+                + POSTGRESQL_LITERAL_QUOTE);
       } else {
         options.add(optionName + "=" + optionValue);
       }
@@ -800,16 +819,17 @@ public class InformationSchemaScanner {
     ResultSet resultSet =
         context.executeQuery(
             Statement.of(
-                "SELECT t.model_name, t.column_kind, t.ordinal_position, t.column_name,"
+                "SELECT t.model_schema, t.model_name, t.column_kind, t.ordinal_position, t.column_name,"
                     + " t.data_type FROM information_schema.model_columns as t"
-                    + " WHERE t.model_catalog = '' AND t.model_schema = ''"
+                    + " WHERE t.model_schema NOT IN"
+                    + " ('information_schema', 'spanner_sys')"
                     + " ORDER BY t.model_name, t.column_kind, t.ordinal_position"));
 
     while (resultSet.next()) {
-      String modelName = resultSet.getString(0);
-      String columnKind = resultSet.getString(1);
-      String columnName = resultSet.getString(3);
-      String spannerType = resultSet.getString(4);
+      String modelName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String columnKind = resultSet.getString(2);
+      String columnName = resultSet.getString(4);
+      String spannerType = resultSet.getString(5);
       if (columnKind.equalsIgnoreCase("INPUT")) {
         builder
             .createModel(modelName)
@@ -834,21 +854,24 @@ public class InformationSchemaScanner {
     ResultSet resultSet =
         context.executeQuery(
             Statement.of(
-                "SELECT t.model_name, t.column_kind, t.column_name, t.option_name, t.option_type,"
-                    + " t.option_value FROM information_schema.model_column_options as t WHERE"
-                    + " t.model_catalog = '' AND t.model_schema = '' ORDER BY t.model_name,"
+                "SELECT t.model_schema, t.model_name, t.column_kind, t.column_name,"
+                    + " t.option_name, t.option_type, t.option_value"
+                    + " FROM information_schema.model_column_options as t"
+                    + " WHERE t.model_schema NOT IN"
+                    + " ('information_schema', 'spanner_sys')"
+                    + " ORDER BY t.model_name,"
                     + " t.column_kind, t.column_name"));
 
     Map<KV<String, String>, ImmutableList.Builder<String>> inputOptions = Maps.newHashMap();
     Map<KV<String, String>, ImmutableList.Builder<String>> outputOptions = Maps.newHashMap();
 
     while (resultSet.next()) {
-      String modelName = resultSet.getString(0);
-      String columnKind = resultSet.getString(1);
-      String columnName = resultSet.getString(2);
-      String optionName = resultSet.getString(3);
-      String optionType = resultSet.getString(4);
-      String optionValue = resultSet.getString(5);
+      String modelName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String columnKind = resultSet.getString(2);
+      String columnName = resultSet.getString(3);
+      String optionName = resultSet.getString(4);
+      String optionType = resultSet.getString(5);
+      String optionValue = resultSet.getString(6);
 
       KV<String, String> kv = KV.of(modelName, columnName);
       ImmutableList.Builder<String> options;
@@ -864,16 +887,16 @@ public class InformationSchemaScanner {
         options.add(
             optionName
                 + "="
-                + DdlUtils.GSQL_LITERAL_QUOTE
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
-                + DdlUtils.GSQL_LITERAL_QUOTE);
+                + GSQL_LITERAL_QUOTE
+                + OPTION_STRING_ESCAPER.escape(optionValue)
+                + GSQL_LITERAL_QUOTE);
       } else if (optionType.equalsIgnoreCase("character varying")) {
         options.add(
             optionName
                 + "="
-                + DdlUtils.POSTGRESQL_LITERAL_QUOTE
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
-                + DdlUtils.POSTGRESQL_LITERAL_QUOTE);
+                + POSTGRESQL_LITERAL_QUOTE
+                + OPTION_STRING_ESCAPER.escape(optionValue)
+                + POSTGRESQL_LITERAL_QUOTE);
       } else {
         options.add(optionName + "=" + optionValue);
       }
@@ -1028,16 +1051,16 @@ public class InformationSchemaScanner {
         options.add(
             optionName
                 + "="
-                + DdlUtils.GSQL_LITERAL_QUOTE
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
-                + DdlUtils.GSQL_LITERAL_QUOTE);
+                + GSQL_LITERAL_QUOTE
+                + OPTION_STRING_ESCAPER.escape(optionValue)
+                + GSQL_LITERAL_QUOTE);
       } else if (optionType.equalsIgnoreCase("character varying")) {
         options.add(
             optionName
                 + "="
-                + DdlUtils.POSTGRESQL_LITERAL_QUOTE
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
-                + DdlUtils.POSTGRESQL_LITERAL_QUOTE);
+                + POSTGRESQL_LITERAL_QUOTE
+                + OPTION_STRING_ESCAPER.escape(optionValue)
+                + POSTGRESQL_LITERAL_QUOTE);
       } else {
         options.add(optionName + "=" + optionValue);
       }
@@ -1089,12 +1112,12 @@ public class InformationSchemaScanner {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         queryStatement =
-            Statement.of("SELECT s.name, s.data_type FROM information_schema.sequences AS s");
+            Statement.of("SELECT s.schema, s.name, s.data_type FROM information_schema.sequences AS s");
         break;
       case POSTGRESQL:
         queryStatement =
             Statement.of(
-                "SELECT s.sequence_name, s.data_type FROM information_schema.sequences AS s");
+                "SELECT s.sequence_schema, s.sequence_name, s.data_type FROM information_schema.sequences AS s");
         break;
       default:
         throw new IllegalArgumentException("Unrecognized dialect: " + dialect);
@@ -1102,7 +1125,7 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(queryStatement);
     while (resultSet.next()) {
-      String sequenceName = resultSet.getString(0);
+      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       builder.createSequence(sequenceName).endSequence();
 
       Statement sequenceCounterStatement;
@@ -1136,18 +1159,18 @@ public class InformationSchemaScanner {
     ResultSet resultSet =
         context.executeQuery(
             Statement.of(
-                "SELECT t.name, t.option_name, t.option_type, t.option_value"
+                "SELECT t.schema, t.name, t.option_name, t.option_type, t.option_value"
                     + " FROM information_schema.sequence_options AS t"
                     + " ORDER BY t.name, t.option_name"));
 
     Map<String, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
-      String sequenceName = resultSet.getString(0);
-      String optionName = resultSet.getString(1);
-      String optionType = resultSet.getString(2);
-      String optionValue = resultSet.getString(3);
+      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String optionName = resultSet.getString(2);
+      String optionType = resultSet.getString(3);
+      String optionValue = resultSet.getString(4);
 
-      if (optionName == Sequence.SEQUENCE_START_WITH_COUNTER
+      if (Objects.equals(optionName, Sequence.SEQUENCE_START_WITH_COUNTER)
           && currentCounters.containsKey(sequenceName)) {
         // The sequence is in use, we need to apply the current counter to
         // the DDL builder, instead of the one retrieved from Information Schema.
@@ -1159,9 +1182,9 @@ public class InformationSchemaScanner {
         options.add(
             optionName
                 + "="
-                + DdlUtils.GSQL_LITERAL_QUOTE
-                + DdlUtils.OPTION_STRING_ESCAPER.escape(optionValue)
-                + DdlUtils.GSQL_LITERAL_QUOTE);
+                + GSQL_LITERAL_QUOTE
+                + OPTION_STRING_ESCAPER.escape(optionValue)
+                + GSQL_LITERAL_QUOTE);
       } else {
         options.add(optionName + "=" + optionValue);
       }
@@ -1176,7 +1199,7 @@ public class InformationSchemaScanner {
       // happen and they will make the sequence advances past the buffer.
       Long newCounterStartValue = entry.getValue() + Sequence.SEQUENCE_COUNTER_BUFFER;
       options.add(
-          Sequence.SEQUENCE_START_WITH_COUNTER + "=" + String.valueOf(newCounterStartValue));
+          Sequence.SEQUENCE_START_WITH_COUNTER + "=" + newCounterStartValue);
       LOG.info(
           "Sequence "
               + entry.getKey()
@@ -1200,18 +1223,18 @@ public class InformationSchemaScanner {
     ResultSet resultSet =
         context.executeQuery(
             Statement.of(
-                "SELECT t.sequence_name, t.sequence_kind, t.counter_start_value, "
-                    + " t.skip_range_min, t.skip_range_max"
+                "SELECT t.sequence_schema, t.sequence_name, t.sequence_kind,"
+                    + " t.counter_start_value, t.skip_range_min, t.skip_range_max"
                     + " FROM information_schema.sequences AS t"
                     + " ORDER BY t.sequence_name"));
 
     Map<String, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
-      String sequenceName = resultSet.getString(0);
-      String sequenceKind = resultSet.isNull(1) ? null : resultSet.getString(1);
-      Long counterStartValue = resultSet.isNull(2) ? null : resultSet.getLong(2);
-      Long skipRangeMin = resultSet.isNull(3) ? null : resultSet.getLong(3);
-      Long skipRangeMax = resultSet.isNull(4) ? null : resultSet.getLong(4);
+      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String sequenceKind = resultSet.isNull(2) ? null : resultSet.getString(2);
+      Long counterStartValue = resultSet.isNull(3) ? null : resultSet.getLong(3);
+      Long skipRangeMin = resultSet.isNull(4) ? null : resultSet.getLong(4);
+      Long skipRangeMax = resultSet.isNull(5) ? null : resultSet.getLong(5);
 
       if (sequenceKind == null) {
         throw new IllegalArgumentException(

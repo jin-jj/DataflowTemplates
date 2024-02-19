@@ -16,6 +16,8 @@ public abstract class NamedSchema implements Serializable {
 
   public abstract Dialect dialect();
 
+  public abstract NamedSchema.Builder toBuilder();
+
   public String prettyPrint() {
     StringBuilder sb = new StringBuilder();
     try {
@@ -46,10 +48,21 @@ public abstract class NamedSchema implements Serializable {
   @AutoValue.Builder
   public abstract static class Builder {
 
+    private Ddl.Builder ddlBuilder;
+
+    public NamedSchema.Builder ddlBuilder(Ddl.Builder ddlBuilder) {
+      this.ddlBuilder = ddlBuilder;
+      return this;
+    }
     public abstract Builder name(String value);
 
     public abstract Builder dialect(Dialect value);
 
     public abstract NamedSchema build();
+
+    public Ddl.Builder endNamedSchema() {
+      ddlBuilder.addSchema(build());
+      return ddlBuilder;
+    }
   }
 }

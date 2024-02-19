@@ -50,6 +50,13 @@ public class DdlUtils {
         .collect(Collectors.joining("."));
   }
 
+  public static String getQualifiedName(String schemaName, String shortName) {
+    if (schemaName.isEmpty() || schemaName.equals("public") || shortName == null) {
+      return shortName;
+    }
+    return schemaName + "." + shortName;
+  }
+
   private static String identifierQuote(Dialect dialect) {
     switch (dialect) {
       case POSTGRESQL:

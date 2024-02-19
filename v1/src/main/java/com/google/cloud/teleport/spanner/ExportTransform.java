@@ -24,6 +24,7 @@ import com.google.cloud.spanner.TimestampBound;
 import com.google.cloud.teleport.spanner.ddl.ChangeStream;
 import com.google.cloud.teleport.spanner.ddl.Ddl;
 import com.google.cloud.teleport.spanner.ddl.Model;
+import com.google.cloud.teleport.spanner.ddl.NamedSchema;
 import com.google.cloud.teleport.spanner.ddl.Sequence;
 import com.google.cloud.teleport.spanner.ddl.Table;
 import com.google.cloud.teleport.spanner.proto.ExportProtos;
@@ -282,6 +283,7 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
     PCollection<ReadOperation> tables =
         ddl.apply("Build table read operations", new BuildReadFromTableOperations(tableNames));
 
+
     PCollection<KV<String, Void>> allTableAndViewNames =
         ddl.apply(
             "List all table and view names",
@@ -344,6 +346,21 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
                     Ddl ddl = c.element();
                     for (Sequence sequence : ddl.sequences()) {
                       c.output(sequence.name());
+                    }
+                  }
+                }));
+
+    PCollection<String> allNamedSchemaNames =
+        ddl.apply(
+            "List all named schema names",
+            ParDo.of(
+                new DoFn<Ddl, String>() {
+
+                  @ProcessElement
+                  public void processElement(ProcessContext c) {
+                    Ddl ddl = c.element();
+                    for (NamedSchema t : ddl.schemas()) {
+                      c.output(t.name());
                     }
                   }
                 }));
@@ -513,6 +530,24 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
                   }
                 }));
 
+    PCollection<KV<String, Iterable<String>>> namedSchemas =
+        allNamedSchemaNames.apply(
+            "Export named schemas",
+            ParDo.of(
+                new DoFn<String, KV<String, Iterable<String>>>() {
+
+                  @ProcessElement
+                  public void processElement(ProcessContext c) {
+                    String namedSchema = c.element();
+                    LOG.info("Exporting named schema: " + namedSchema);
+                    // This file will contain the schema definition for the sequence.
+                    c.output(
+                        KV.of(
+                            namedSchema,
+                            Collections.singleton(namedSchema + ".avro-00000-of-00001")));
+                  }
+                }));
+
     // Empty tables, views, models, change streams and sequences are handled together,
     // because we export them as empty Avro files that only contain the Avro schemas.
     PCollection<KV<String, Iterable<String>>> emptySchemaFiles =
@@ -520,6 +555,7 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
             .and(models)
             .and(changeStreams)
             .and(sequences)
+            .and(namedSchemas)
             .apply("Combine all empty schema files", Flatten.pCollections());
 
     emptySchemaFiles =
@@ -684,13 +720,18 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
 
     @Override
     public Schema getSchema(String tableName) {
+      LOG.error("Get schema tableName={}", tableName);
       Map<String, SerializableSchemaSupplier> si = sideInput(avroSchemas);
       // Check if there are any schemas available or if the table it is EMPTY_EXPORT_FILE
       if (si.isEmpty() || tableName.equals(EMPTY_EXPORT_FILE)) {
         // The EMPTY_EXPORT_FILE still needs to have a rudimentary schema for it to be created.
         return SchemaBuilder.record("Empty").fields().endRecord();
       }
-      return si.get(tableName).get();
+      SerializableSchemaSupplier supplier = si.get(tableName);
+      if(supplier == null) {
+        LOG.error("Can not find supplier using {}", tableName);
+      }
+      return supplier.get();
     }
 
     @Override

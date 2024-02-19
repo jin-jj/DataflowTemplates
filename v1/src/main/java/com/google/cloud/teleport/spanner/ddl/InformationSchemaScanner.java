@@ -15,7 +15,6 @@
  */
 package com.google.cloud.teleport.spanner.ddl;
 
-import static com.google.cloud.teleport.spanner.common.DdlUtils.*;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.getQualifiedName;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.quoteIdentifier;
 import static com.google.common.base.Strings.isNullOrEmpty;
@@ -181,7 +180,9 @@ public class InformationSchemaScanner {
     ResultSet resultSet = context.executeQuery(queryBuilder.build());
     while (resultSet.next()) {
       String schemaName = resultSet.getString(0);
-      if (schemaName.isEmpty() || schemaName.equals("public")) continue;
+      if (schemaName.isEmpty() || schemaName.equals("public")) {
+        continue;
+      }
       builder.createSchema(schemaName).endNamedSchema();
     }
   }

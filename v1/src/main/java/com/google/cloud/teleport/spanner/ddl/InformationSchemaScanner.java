@@ -15,6 +15,7 @@
  */
 package com.google.cloud.teleport.spanner.ddl;
 
+import static com.google.cloud.teleport.spanner.common.DdlUtils.OPTION_STRING_ESCAPER;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.getQualifiedName;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.quoteIdentifier;
 import static com.google.common.base.Strings.isNullOrEmpty;

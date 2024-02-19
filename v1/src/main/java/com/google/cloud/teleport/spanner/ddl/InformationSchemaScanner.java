@@ -15,7 +15,9 @@
  */
 package com.google.cloud.teleport.spanner.ddl;
 
+import static com.google.cloud.teleport.spanner.common.DdlUtils.GSQL_LITERAL_QUOTE;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.OPTION_STRING_ESCAPER;
+import static com.google.cloud.teleport.spanner.common.DdlUtils.POSTGRESQL_LITERAL_QUOTE;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.getQualifiedName;
 import static com.google.cloud.teleport.spanner.common.DdlUtils.quoteIdentifier;
 import static com.google.common.base.Strings.isNullOrEmpty;
@@ -40,7 +42,9 @@ import org.apache.beam.sdk.values.KV;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Scans INFORMATION_SCHEMA.* tables and build {@link Ddl}. */
+/**
+ * Scans INFORMATION_SCHEMA.* tables and build {@link Ddl}.
+ */
 public class InformationSchemaScanner {
 
   private static final Logger LOG = LoggerFactory.getLogger(InformationSchemaScanner.class);
@@ -239,7 +243,8 @@ public class InformationSchemaScanner {
       String tableSchema = resultSet.getString(0);
       String tableName = getQualifiedName(tableSchema, resultSet.getString(1));
       // Parent table and child table has to be in same schema.
-      String parentTableName = resultSet.isNull(2) ? null : getQualifiedName(tableSchema, resultSet.getString(2));
+      String parentTableName =
+          resultSet.isNull(2) ? null : getQualifiedName(tableSchema, resultSet.getString(2));
       String onDeleteAction = resultSet.isNull(3) ? null : resultSet.getString(3);
 
       // Error out when the parent table or on delete action are set incorrectly.
@@ -335,7 +340,7 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(statement);
     while (resultSet.next()) {
-      String tableName = getQualifiedName(resultSet.getString(0),resultSet.getString(1));
+      String tableName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       String indexName = resultSet.getString(2);
       String parent = resultSet.isNull(3) ? null : resultSet.getString(4);
       // should be NULL but is an empty string in practice.
@@ -1114,7 +1119,8 @@ public class InformationSchemaScanner {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         queryStatement =
-            Statement.of("SELECT s.schema, s.name, s.data_type FROM information_schema.sequences AS s");
+            Statement.of(
+                "SELECT s.schema, s.name, s.data_type FROM information_schema.sequences AS s");
         break;
       case POSTGRESQL:
         queryStatement =

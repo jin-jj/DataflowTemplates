@@ -722,15 +722,16 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
     public Schema getSchema(String tableName) {
       LOG.error("Get schema tableName={}", tableName);
       Map<String, SerializableSchemaSupplier> si = sideInput(avroSchemas);
-      for(String key: si.keySet()) {
-        LOG.error("Iterating schema tableName={}", key);
-      }
       // Check if there are any schemas available or if the table it is EMPTY_EXPORT_FILE
       if (si.isEmpty() || tableName.equals(EMPTY_EXPORT_FILE)) {
         // The EMPTY_EXPORT_FILE still needs to have a rudimentary schema for it to be created.
         return SchemaBuilder.record("Empty").fields().endRecord();
       }
-      return si.get(tableName).get();
+      SerializableSchemaSupplier supplier = si.get(tableName);
+      if(supplier == null) {
+        LOG.error("Can not find supplier using {}", tableName);
+      }
+      return supplier.get();
     }
 
     @Override

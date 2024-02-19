@@ -354,7 +354,7 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
         ddl.apply(
             "List all named schema names",
             ParDo.of(
-                new DoFn<Ddl, KV<String, Void>>() {
+                new DoFn<Ddl, String>() {
 
                   @ProcessElement
                   public void processElement(ProcessContext c) {

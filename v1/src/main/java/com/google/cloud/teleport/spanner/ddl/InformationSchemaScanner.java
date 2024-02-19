@@ -165,13 +165,12 @@ public class InformationSchemaScanner {
         return Statement.of(
             "SELECT t.option_name, t.option_type, t.option_value "
                 + " FROM information_schema.database_options AS t "
-                + " WHERE t.catalog_name = '' AND t.schema_name = ''");
+                + " WHERE t.schema_name = ''");
       case POSTGRESQL:
         return Statement.of(
             "SELECT t.option_name, t.option_type, t.option_value "
                 + " FROM information_schema.database_options AS t "
-                + " WHERE t.schema_name NOT IN "
-                + "('information_schema', 'spanner_sys', 'pg_catalog')");
+                + " WHERE t.schema_name = 'public'");
       default:
         throw new IllegalArgumentException("Unrecognized dialect: " + dialect);
     }
@@ -380,7 +379,7 @@ public class InformationSchemaScanner {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         return Statement.of(
-            "SELECT t.schema_name, t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
+            "SELECT t.table_schema, t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
                 + " t.is_null_filtered"
                 + " FROM information_schema.indexes AS t"
                 + " WHERE v.table_schema NOT IN"
@@ -389,7 +388,7 @@ public class InformationSchemaScanner {
                 + " ORDER BY t.table_name, t.index_name");
       case POSTGRESQL:
         return Statement.of(
-            "SELECT t.schema_name, t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
+            "SELECT t.table_schema, t.table_name, t.index_name, t.parent_table_name, t.is_unique,"
                 + " t.is_null_filtered, t.filter FROM information_schema.indexes AS t "
                 + " WHERE t.table_schema NOT IN "
                 + " ('information_schema', 'spanner_sys', 'pg_catalog')"
@@ -1133,6 +1132,7 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(queryStatement);
     while (resultSet.next()) {
+      // TODO, remove the dot check after b/325952901 deployed to production.
       String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
           : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       ;
@@ -1175,6 +1175,7 @@ public class InformationSchemaScanner {
 
     Map<String, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
+      // TODO, remove the dot check after b/325952901 deployed to production.
       String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
           : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       String optionName = resultSet.getString(2);
@@ -1241,6 +1242,7 @@ public class InformationSchemaScanner {
 
     Map<String, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
+      // TODO, remove the dot check after b/325952901 deployed to production.
       String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
           : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       String sequenceKind = resultSet.isNull(2) ? null : resultSet.getString(2);

@@ -1133,7 +1133,9 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(queryStatement);
     while (resultSet.next()) {
-      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
+          : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      ;
       builder.createSequence(sequenceName).endSequence();
 
       Statement sequenceCounterStatement;
@@ -1173,7 +1175,8 @@ public class InformationSchemaScanner {
 
     Map<String, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
-      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
+          : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       String optionName = resultSet.getString(2);
       String optionType = resultSet.getString(3);
       String optionValue = resultSet.getString(4);
@@ -1238,7 +1241,8 @@ public class InformationSchemaScanner {
 
     Map<String, ImmutableList.Builder<String>> allOptions = Maps.newHashMap();
     while (resultSet.next()) {
-      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
+          : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       String sequenceKind = resultSet.isNull(2) ? null : resultSet.getString(2);
       Long counterStartValue = resultSet.isNull(3) ? null : resultSet.getLong(3);
       Long skipRangeMin = resultSet.isNull(4) ? null : resultSet.getLong(4);

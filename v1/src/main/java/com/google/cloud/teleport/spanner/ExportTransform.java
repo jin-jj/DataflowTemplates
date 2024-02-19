@@ -684,6 +684,7 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
 
     @Override
     public Schema getSchema(String tableName) {
+      LOG.error("Get schema tableName={}", tableName);
       Map<String, SerializableSchemaSupplier> si = sideInput(avroSchemas);
       // Check if there are any schemas available or if the table it is EMPTY_EXPORT_FILE
       if (si.isEmpty() || tableName.equals(EMPTY_EXPORT_FILE)) {

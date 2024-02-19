@@ -290,10 +290,10 @@ public class InformationSchemaScanner {
       String spannerType = resultSet.getString(4);
       boolean nullable = resultSet.getString(5).equalsIgnoreCase("YES");
       boolean isGenerated = resultSet.getString(6).equalsIgnoreCase("ALWAYS");
-      String generationExpression = resultSet.isNull(7) ? "" : resultSet.getString(6);
+      String generationExpression = resultSet.isNull(7) ? "" : resultSet.getString(7);
       boolean isStored =
           !resultSet.isNull(8) && resultSet.getString(8).equalsIgnoreCase("YES");
-      String defaultExpression = resultSet.isNull(9) ? null : resultSet.getString(8);
+      String defaultExpression = resultSet.isNull(9) ? null : resultSet.getString(9);
       builder
           .createTable(tableName)
           .column(columnName)
@@ -342,7 +342,7 @@ public class InformationSchemaScanner {
     while (resultSet.next()) {
       String tableName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       String indexName = resultSet.getString(2);
-      String parent = resultSet.isNull(3) ? null : resultSet.getString(4);
+      String parent = resultSet.isNull(3) ? null : resultSet.getString(3);
       // should be NULL but is an empty string in practice.
       if (Strings.isNullOrEmpty(parent)) {
         parent = null;

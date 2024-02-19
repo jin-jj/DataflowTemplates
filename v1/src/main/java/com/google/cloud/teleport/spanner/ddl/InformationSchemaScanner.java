@@ -170,7 +170,7 @@ public class InformationSchemaScanner {
         return Statement.of(
             "SELECT t.option_name, t.option_type, t.option_value "
                 + " FROM information_schema.database_options AS t "
-                + " WHERE WHERE t.schema_name = 'public'");
+                + " WHERE t.schema_name = 'public'");
       default:
         throw new IllegalArgumentException("Unrecognized dialect: " + dialect);
     }

@@ -114,8 +114,8 @@ class LocalReadSpannerSchema extends DoFn<Void, SpannerSchema> {
                 + "  LEFT OUTER JOIN ("
                 + "    SELECT t.table_name, t.column_name, COUNT(*) AS indices"
                 + "      FROM information_schema.index_columns AS t "
-                + "      WHERE t.index_name != 'PRIMARY_KEY' AND t.table_catalog = ''"
-                + "      AND t.table_schema = ''"
+                + "      WHERE t.index_name != 'PRIMARY_KEY'"
+                + "      AND c.table_schema NOT IN ('information_schema', 'spanner_sys')"
                 + "      GROUP BY t.table_name, t.column_name) AS t"
                 + "  USING (table_name, column_name)"
                 + "  ORDER BY c.table_name, c.ordinal_position";

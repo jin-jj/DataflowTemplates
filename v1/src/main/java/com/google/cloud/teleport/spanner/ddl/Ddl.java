@@ -514,7 +514,13 @@ public class Ddl implements Serializable {
       sequences.put(sequence.name().toLowerCase(), sequence);
     }
 
-
+    public NamedSchema.Builder createSchema(String name) {
+      NamedSchema schema = schemas.get(name.toLowerCase());
+      if(schema == null) {
+        return NamedSchema.builder(dialect).name(name).ddlBuilder(this);
+      }
+      return schema.toBuilder().ddlBuilder(this);
+    }
     public void addSchema(NamedSchema schema) {
       schemas.put(schema.name().toLowerCase(), schema);
     }

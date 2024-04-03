@@ -21,6 +21,7 @@ import com.google.cloud.spanner.BatchTransactionId;
 import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.spanner.ddl.Ddl;
 import com.google.cloud.teleport.spanner.ddl.InformationSchemaScanner;
+import com.google.cloud.teleport.spanner.ddl.Table;
 import org.apache.beam.sdk.io.gcp.spanner.LocalSpannerAccessor;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.Transaction;
@@ -31,10 +32,13 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PBegin;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** {@link InformationSchemaScanner} as a Beam transform. */
 public class ReadInformationSchema extends PTransform<PBegin, PCollection<Ddl>> {
 
+  private static final Logger LOG = LoggerFactory.getLogger(ReadInformationSchema.class);
   private final SpannerConfig spannerConfig;
   private final PCollectionView<Transaction> tx;
   private final PCollectionView<Dialect> dialectView;
@@ -94,6 +98,9 @@ public class ReadInformationSchema extends PTransform<PBegin, PCollection<Ddl>> 
 
       InformationSchemaScanner scanner = new InformationSchemaScanner(context, dialect);
       Ddl ddl = scanner.scan();
+      for(Table t : ddl.allTables()){
+        LOG.info("table name {}", t.name());
+      }
       c.output(ddl);
     }
   }

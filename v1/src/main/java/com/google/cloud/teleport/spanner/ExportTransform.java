@@ -406,13 +406,14 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
                       public void processElement(ProcessContext c) {
                         Collection<Schema> avroSchemas =
                             new DdlToAvroSchemaConverter(
-                                    "spannerexport",
+                                    "",
                                     "1.0.0",
                                     shouldExportTimestampAsLogicalType.get())
                                 .convert(c.element());
                         for (Schema schema : avroSchemas) {
-                          LOG.info("schema name:{}", schema.getName());
-                          c.output(KV.of(schema.getName(), new SerializableSchemaSupplier(schema)));
+                          LOG.info("Build Avro schemas from DDL name:{},{}", schema.getFullName(), schema.toString());
+                          // TODO: avro also has named schema and space.
+                          c.output(KV.of(schema.getFullName(), new SerializableSchemaSupplier(schema)));
                         }
                       }
                     }))

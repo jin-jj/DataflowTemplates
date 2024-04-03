@@ -565,6 +565,7 @@ public class Ddl implements Serializable {
 
   public Builder toBuilder() {
     Builder builder = new Builder(dialect);
+    builder.schemas.putAll(schemas);
     builder.tables.putAll(tables);
     builder.models.putAll(models);
     builder.views.putAll(views);

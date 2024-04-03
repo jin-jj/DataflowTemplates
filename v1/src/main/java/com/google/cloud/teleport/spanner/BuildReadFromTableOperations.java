@@ -34,10 +34,14 @@ import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Given a Cloud Spanner {@link Ddl} generates a "read all" operation per table. */
 class BuildReadFromTableOperations
     extends PTransform<PCollection<Ddl>, PCollection<ReadOperation>> {
+
+  private static final Logger LOG = LoggerFactory.getLogger(BuildReadFromTableOperations.class);
 
   // The number of read partitions have to be capped so that in case the Partition token is large
   // (which can happen with a table with a lot of columns), the PartitionResponse size is bounded.
@@ -77,7 +81,7 @@ class BuildReadFromTableOperations
                           .filter(x -> !x.isGenerated())
                           .map(x -> createColumnExpression(x))
                           .collect(Collectors.joining(","));
-
+                  LOG.info("BuildReadFromTableOperations {}.", table.name());
                   PartitionOptions partitionOptions =
                       PartitionOptions.newBuilder().setMaxPartitions(MAX_PARTITIONS).build();
 

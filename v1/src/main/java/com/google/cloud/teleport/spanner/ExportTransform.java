@@ -406,7 +406,7 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
                       public void processElement(ProcessContext c) {
                         Collection<Schema> avroSchemas =
                             new DdlToAvroSchemaConverter(
-                                    "",
+                                    "spannerexport",
                                     "1.0.0",
                                     shouldExportTimestampAsLogicalType.get())
                                 .convert(c.element());

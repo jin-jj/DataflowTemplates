@@ -28,6 +28,7 @@ import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ENTITY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ENTITY_MODEL;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_FOREIGN_KEY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_INDEX;
+import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_NAME;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_NAMED_SCHEMA;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ON_DELETE_ACTION;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_OPTION;
@@ -43,6 +44,7 @@ import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_VIEW_QUERY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_VIEW_SECURITY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SQL_TYPE;
 import static com.google.cloud.teleport.spanner.AvroUtil.STORED;
+import static com.google.cloud.teleport.spanner.AvroUtil.generateAvroSchemaName;
 
 import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.spanner.common.NumericUtils;
@@ -88,7 +90,8 @@ public class DdlToAvroSchemaConverter {
     for (NamedSchema schema : ddl.schemas()) {
       LOG.info("DdlToAvo Schema {}",schema.name());
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
-          SchemaBuilder.record(schema.name()).namespace(this.namespace);
+          SchemaBuilder.record(generateAvroSchemaName(schema.name())).namespace(this.namespace);
+      recordBuilder.prop(SPANNER_NAME, schema.name());
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);
       recordBuilder.prop(GOOGLE_STORAGE, "CloudSpanner");
       // Indicate that this is a "CREATE SCHEMA", not a table or a view.
@@ -98,7 +101,8 @@ public class DdlToAvroSchemaConverter {
     for (Table table : ddl.allTables()) {
       LOG.info("DdlToAvo Table {}",table.name());
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
-          SchemaBuilder.record(table.name()).namespace(this.namespace);
+          SchemaBuilder.record(generateAvroSchemaName(table.name())).namespace(this.namespace);
+      recordBuilder.prop(SPANNER_NAME, table.name());
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);
       recordBuilder.prop(GOOGLE_STORAGE, "CloudSpanner");
       if (table.interleaveInParent() != null) {
@@ -172,7 +176,8 @@ public class DdlToAvroSchemaConverter {
 
     for (Model model : ddl.models()) {
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
-          SchemaBuilder.record(model.name()).namespace(this.namespace);
+          SchemaBuilder.record(generateAvroSchemaName(model.name())).namespace(this.namespace);
+      recordBuilder.prop(SPANNER_NAME, model.name());
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);
       recordBuilder.prop(GOOGLE_STORAGE, "CloudSpanner");
       recordBuilder.prop(SPANNER_ENTITY, SPANNER_ENTITY_MODEL);
@@ -229,7 +234,8 @@ public class DdlToAvroSchemaConverter {
 
     for (View view : ddl.views()) {
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
-          SchemaBuilder.record(view.name()).namespace(this.namespace);
+          SchemaBuilder.record(generateAvroSchemaName(view.name())).namespace(this.namespace);
+      recordBuilder.prop(SPANNER_NAME, view.name());
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);
       recordBuilder.prop(GOOGLE_STORAGE, "CloudSpanner");
       recordBuilder.prop(SPANNER_VIEW_QUERY, view.query());
@@ -241,7 +247,8 @@ public class DdlToAvroSchemaConverter {
 
     for (ChangeStream changeStream : ddl.changeStreams()) {
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
-          SchemaBuilder.record(changeStream.name()).namespace(this.namespace);
+          SchemaBuilder.record(generateAvroSchemaName(changeStream.name())).namespace(this.namespace);
+      recordBuilder.prop(SPANNER_NAME, changeStream.name());
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);
       recordBuilder.prop(GOOGLE_STORAGE, "CloudSpanner");
       recordBuilder.prop(
@@ -257,7 +264,8 @@ public class DdlToAvroSchemaConverter {
 
     for (Sequence sequence : ddl.sequences()) {
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
-          SchemaBuilder.record(sequence.name()).namespace(this.namespace);
+          SchemaBuilder.record(generateAvroSchemaName(sequence.name())).namespace(this.namespace);
+      recordBuilder.prop(SPANNER_NAME, sequence.name());
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);
       recordBuilder.prop(GOOGLE_STORAGE, "CloudSpanner");
       if (sequence.options() != null) {

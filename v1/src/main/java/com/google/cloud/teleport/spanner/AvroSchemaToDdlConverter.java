@@ -26,12 +26,12 @@ import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ENTITY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ENTITY_MODEL;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_FOREIGN_KEY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_INDEX;
+import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_NAMED_SCHEMA;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ON_DELETE_ACTION;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_OPTION;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_PARENT;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_PRIMARY_KEY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_REMOTE;
-import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_NAMED_SCHEMA;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_SEQUENCE_COUNTER_START;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_SEQUENCE_KIND;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_SEQUENCE_OPTION;
@@ -41,6 +41,7 @@ import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_VIEW_QUERY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_VIEW_SECURITY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SQL_TYPE;
 import static com.google.cloud.teleport.spanner.AvroUtil.STORED;
+import static com.google.cloud.teleport.spanner.AvroUtil.getSpannerObjectName;
 import static com.google.cloud.teleport.spanner.AvroUtil.unpackNullable;
 
 import com.google.cloud.spanner.Dialect;
@@ -67,6 +68,7 @@ import org.slf4j.LoggerFactory;
 
 /** Allows to convert a set of Avro schemas to {@link Ddl}. */
 public class AvroSchemaToDdlConverter {
+
   private static final Logger LOG = LoggerFactory.getLogger(AvroSchemaToDdlConverter.class);
   private final Dialect dialect;
 
@@ -103,9 +105,9 @@ public class AvroSchemaToDdlConverter {
   }
 
   public NamedSchema toSchema(String schemaName, Schema schema) {
-      if (schemaName == null) {
-        schemaName = schema.getName();
-      }
+    if (schemaName == null) {
+      schemaName = schema.getName();
+    }
     NamedSchema.Builder builder =
         NamedSchema.builder().dialect(dialect).name(schemaName);
     return builder.build();
@@ -113,7 +115,7 @@ public class AvroSchemaToDdlConverter {
 
   public View toView(String viewName, Schema schema) {
     if (viewName == null) {
-      viewName = schema.getFullName();
+      viewName = getSpannerObjectName(schema);
     }
     LOG.debug("Converting to Ddl viewName {}", viewName);
 
@@ -127,7 +129,7 @@ public class AvroSchemaToDdlConverter {
 
   public Model toModel(String modelName, Schema schema) {
     if (modelName == null) {
-      modelName = schema.getFullName();
+      modelName = getSpannerObjectName(schema);
     }
     LOG.debug("Converting to Ddl modelName {}", modelName);
 
@@ -175,7 +177,7 @@ public class AvroSchemaToDdlConverter {
 
   public ChangeStream toChangeStream(String changeStreamName, Schema schema) {
     if (changeStreamName == null) {
-      changeStreamName = schema.getName();
+      changeStreamName = getSpannerObjectName(schema);
     }
     LOG.debug("Converting to Ddl changeStreamName {}", changeStreamName);
 
@@ -199,7 +201,7 @@ public class AvroSchemaToDdlConverter {
 
   public Sequence toSequence(String sequenceName, Schema schema) {
     if (sequenceName == null) {
-      sequenceName = schema.getFullName();
+      sequenceName = getSpannerObjectName(schema);
     }
     LOG.debug("Converting to Ddl sequenceName {}", sequenceName);
     Sequence.Builder builder = Sequence.builder(dialect).name(sequenceName);
@@ -228,7 +230,7 @@ public class AvroSchemaToDdlConverter {
 
   public Table toTable(String tableName, Schema schema) {
     if (tableName == null) {
-      tableName = schema.getFullName();
+      tableName = getSpannerObjectName(schema);
     }
     LOG.debug("Converting to Ddl tableName {}", tableName);
 

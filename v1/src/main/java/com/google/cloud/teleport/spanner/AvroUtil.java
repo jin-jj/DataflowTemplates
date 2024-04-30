@@ -50,6 +50,7 @@ public class AvroUtil {
   public static final String SPANNER_VIEW_QUERY = "spannerViewQuery";
   public static final String SPANNER_VIEW_SECURITY = "spannerViewSecurity";
   public static final String SPANNER_NAMED_SCHEMA = "spannerNamedSchema";
+  public static final String SPANNER_NAME = "spannerName";
   public static final String STORED = "stored";
 
   public static Schema unpackNullable(Schema schema) {
@@ -69,4 +70,19 @@ public class AvroUtil {
     }
     return null;
   }
+
+  public static String getSpannerObjectName(Schema schema) {
+    if(schema.getProp(SPANNER_NAME) != null && !schema.getProp(SPANNER_NAME).isEmpty()) {
+      return schema.getProp(SPANNER_NAME);
+    }
+    return schema.getName();
+  }
+
+  public static String generateAvroSchemaName(String spannerName) {
+    if(spannerName.contains(".")) {
+      return spannerName.replaceAll("\\.", "_");
+    }
+    return spannerName;
+  }
+
 }

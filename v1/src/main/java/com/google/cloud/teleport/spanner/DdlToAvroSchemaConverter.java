@@ -69,6 +69,7 @@ import org.slf4j.LoggerFactory;
 
 /** Converts a Spanner {@link Ddl} to Avro {@link Schema}. */
 public class DdlToAvroSchemaConverter {
+
   private static final Logger LOG = LoggerFactory.getLogger(DdlToAvroSchemaConverter.class);
   private final String namespace;
   private final String version;

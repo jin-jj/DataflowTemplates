@@ -1133,10 +1133,7 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(queryStatement);
     while (resultSet.next()) {
-      // TODO, remove the dot check after b/325952901 deployed to production.
-      String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
-          : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
-      ;
+      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
       builder.createSequence(sequenceName).endSequence();
 
       Statement sequenceCounterStatement;

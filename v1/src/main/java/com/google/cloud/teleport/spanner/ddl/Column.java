@@ -15,7 +15,7 @@
  */
 package com.google.cloud.teleport.spanner.ddl;
 
-import static com.google.cloud.teleport.spanner.common.DdlUtils.*;
+import static com.google.cloud.teleport.spanner.common.DdlUtils.quoteIdentifier;
 
 import com.google.auto.value.AutoValue;
 import com.google.cloud.spanner.Dialect;
@@ -26,7 +26,9 @@ import java.io.IOException;
 import java.io.Serializable;
 import javax.annotation.Nullable;
 
-/** Cloud Spanner column. */
+/**
+ * Cloud Spanner column.
+ */
 @AutoValue
 public abstract class Column implements Serializable {
 
@@ -125,7 +127,9 @@ public abstract class Column implements Serializable {
     return SizedType.typeString(type(), size());
   }
 
-  /** A builder for {@link Column}. */
+  /**
+   * A builder for {@link Column}.
+   */
   @AutoValue.Builder
   public abstract static class Builder {
 

@@ -26,12 +26,12 @@ import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ENTITY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ENTITY_MODEL;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_FOREIGN_KEY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_INDEX;
-import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_NAMED_SCHEMA;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_ON_DELETE_ACTION;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_OPTION;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_PARENT;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_PRIMARY_KEY;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_REMOTE;
+import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_NAMED_SCHEMA;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_SEQUENCE_COUNTER_START;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_SEQUENCE_KIND;
 import static com.google.cloud.teleport.spanner.AvroUtil.SPANNER_SEQUENCE_OPTION;
@@ -68,7 +68,6 @@ import org.slf4j.LoggerFactory;
 
 /** Allows to convert a set of Avro schemas to {@link Ddl}. */
 public class AvroSchemaToDdlConverter {
-
   private static final Logger LOG = LoggerFactory.getLogger(AvroSchemaToDdlConverter.class);
   private final Dialect dialect;
 
@@ -105,9 +104,9 @@ public class AvroSchemaToDdlConverter {
   }
 
   public NamedSchema toSchema(String schemaName, Schema schema) {
-    if (schemaName == null) {
-      schemaName = schema.getName();
-    }
+      if (schemaName == null) {
+        schemaName = schema.getName();
+      }
     NamedSchema.Builder builder =
         NamedSchema.builder().dialect(dialect).name(schemaName);
     return builder.build();
@@ -394,36 +393,35 @@ public class AvroSchemaToDdlConverter {
           return com.google.cloud.teleport.spanner.common.Type.numeric();
         }
         if (LogicalTypes.decimal(NumericUtils.PG_MAX_PRECISION, NumericUtils.PG_MAX_SCALE)
-                .equals(logicalType)
+            .equals(logicalType)
             && dialect == Dialect.POSTGRESQL) {
           return com.google.cloud.teleport.spanner.common.Type.pgNumeric();
         }
         return (dialect == Dialect.GOOGLE_STANDARD_SQL)
             ? com.google.cloud.teleport.spanner.common.Type.bytes()
             : com.google.cloud.teleport.spanner.common.Type.pgBytea();
-      case ARRAY:
-        {
-          if (supportArrays) {
-            Schema element = f.getElementType();
-            if (element.getType() == Schema.Type.UNION) {
-              Schema unpacked = unpackNullable(element);
-              if (unpacked == null) {
-                throw new IllegalArgumentException("Cannot infer a type " + f);
-              }
-              element = unpacked;
+      case ARRAY: {
+        if (supportArrays) {
+          Schema element = f.getElementType();
+          if (element.getType() == Schema.Type.UNION) {
+            Schema unpacked = unpackNullable(element);
+            if (unpacked == null) {
+              throw new IllegalArgumentException("Cannot infer a type " + f);
             }
-            try {
-              return (dialect == Dialect.GOOGLE_STANDARD_SQL)
-                  ? com.google.cloud.teleport.spanner.common.Type.array(inferType(element, false))
-                  : com.google.cloud.teleport.spanner.common.Type.pgArray(
-                      inferType(element, false));
-            } catch (IllegalArgumentException e) {
-              throw new IllegalArgumentException("Cannot infer array type for field " + f);
-            }
+            element = unpacked;
           }
-          // Throw exception.
-          break;
+          try {
+            return (dialect == Dialect.GOOGLE_STANDARD_SQL)
+                ? com.google.cloud.teleport.spanner.common.Type.array(inferType(element, false))
+                : com.google.cloud.teleport.spanner.common.Type.pgArray(
+                    inferType(element, false));
+          } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Cannot infer array type for field " + f);
+          }
         }
+        // Throw exception.
+        break;
+      }
     }
     throw new IllegalArgumentException("Cannot infer a type " + f);
   }
@@ -469,28 +467,26 @@ public class AvroSchemaToDdlConverter {
         return "numeric";
       case JSON:
         return "JSON";
-      case ARRAY:
-        {
-          if (supportArray) {
-            com.google.cloud.teleport.spanner.common.Type element =
-                spannerType.getArrayElementType();
-            String elementStr = toString(element, false);
-            return "ARRAY<" + elementStr + ">";
-          }
-          // otherwise fall through and throw an error.
-          break;
+      case ARRAY: {
+        if (supportArray) {
+          com.google.cloud.teleport.spanner.common.Type element =
+              spannerType.getArrayElementType();
+          String elementStr = toString(element, false);
+          return "ARRAY<" + elementStr + ">";
         }
-      case PG_ARRAY:
-        {
-          if (supportArray) {
-            com.google.cloud.teleport.spanner.common.Type element =
-                spannerType.getArrayElementType();
-            String elementStr = toString(element, false);
-            return elementStr + "[]";
-          }
-          // otherwise fall through and throw an error.
-          break;
+        // otherwise fall through and throw an error.
+        break;
+      }
+      case PG_ARRAY: {
+        if (supportArray) {
+          com.google.cloud.teleport.spanner.common.Type element =
+              spannerType.getArrayElementType();
+          String elementStr = toString(element, false);
+          return elementStr + "[]";
         }
+        // otherwise fall through and throw an error.
+        break;
+      }
     }
     throw new IllegalArgumentException("Cannot to string the type " + spannerType);
   }

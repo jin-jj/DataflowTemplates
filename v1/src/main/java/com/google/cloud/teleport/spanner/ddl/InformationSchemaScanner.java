@@ -1132,8 +1132,10 @@ public class InformationSchemaScanner {
 
     ResultSet resultSet = context.executeQuery(queryStatement);
     while (resultSet.next()) {
-      String sequenceName = getQualifiedName(resultSet.getString(0), resultSet.getString(1));
-
+      // TODO, remove the dot check after b/325952901 deployed to production.
+      String sequenceName = resultSet.getString(1).contains(".") ? resultSet.getString(1)
+          : getQualifiedName(resultSet.getString(0), resultSet.getString(1));
+      ;
       builder.createSequence(sequenceName).endSequence();
 
       Statement sequenceCounterStatement;
@@ -1145,7 +1147,7 @@ public class InformationSchemaScanner {
         case POSTGRESQL:
           sequenceCounterStatement =
               Statement.of(
-                  "SELECT spanner.GET_INTERNAL_SEQUENCE_STATE('\"" + sequenceName + "\"')");
+                  "SELECT spanner.GET_INTERNAL_SEQUENCE_STATE('" + quoteIdentifier(sequenceName, dialect) + "')");
           break;
         default:
           throw new IllegalArgumentException("Unrecognized dialect: " + dialect);

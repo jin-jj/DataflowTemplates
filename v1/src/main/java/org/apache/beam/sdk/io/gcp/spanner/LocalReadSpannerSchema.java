@@ -107,39 +107,40 @@ class LocalReadSpannerSchema extends DoFn<Void, SpannerSchema> {
                 + "  , c.spanner_type"
                 + "  , (1 + COALESCE(t.indices, 0)) AS cells_mutated"
                 + "  FROM ("
-                + "    SELECT c.table_name, c.column_name, c.spanner_type, c.ordinal_position"
+                + "    SELECT c.table_schema, c.table_name, c.column_name, c.spanner_type, c.ordinal_position"
                 + "     FROM information_schema.columns as c"
                 + "     WHERE c.table_schema NOT IN"
                 + "     ('information_schema', 'spanner_sys')) AS c"
                 + "  LEFT OUTER JOIN ("
-                + "    SELECT t.table_name, t.column_name, COUNT(*) AS indices"
+                + "    SELECT t.table_schema, t.table_name, t.column_name, COUNT(*) AS indices"
                 + "      FROM information_schema.index_columns AS t "
                 + "      WHERE t.index_name != 'PRIMARY_KEY'"
                 + "      AND c.table_schema NOT IN ('information_schema', 'spanner_sys')"
-                + "      GROUP BY t.table_name, t.column_name) AS t"
-                + "  USING (table_name, column_name)"
+                + "      GROUP BY t.table_schema, t.table_name, t.column_name) AS t"
+                + "  USING (table_schema, table_name, column_name)"
                 + "  ORDER BY c.table_name, c.ordinal_position";
         break;
       case POSTGRESQL:
         statement =
             "SELECT"
-                + "    c.table_name"
+                + "    c.table_schema"
+                + "  ,  c.table_name"
                 + "  , c.column_name"
                 + "  , c.spanner_type"
                 + "  , (1 + COALESCE(t.indices, 0)) AS cells_mutated"
                 + "  FROM ("
-                + "    SELECT c.table_name, c.column_name, c.spanner_type, c.ordinal_position"
+                + "    SELECT c.table_schema, c.table_name, c.column_name, c.spanner_type, c.ordinal_position"
                 + "      FROM information_schema.columns as c"
                 + "      WHERE c.table_schema NOT IN"
                 + "      ('information_schema', 'spanner_sys', 'pg_catalog')) AS c"
                 + "  LEFT OUTER JOIN ("
-                + "    SELECT t.table_name, t.column_name, COUNT(*) AS indices"
+                + "    SELECT t.table_schema, t.table_name, t.column_name, COUNT(*) AS indices"
                 + "      FROM information_schema.index_columns AS t "
                 + "      WHERE t.index_name != 'PRIMARY_KEY'"
                 + "      AND t.table_schema NOT IN"
                 + "      ('information_schema', 'spanner_sys', 'pg_catalog')"
-                + "      GROUP BY t.table_name, t.column_name) AS t"
-                + "  USING (table_name, column_name)"
+                + "      GROUP BY t.table_schema, t.table_name, t.column_name) AS t"
+                + "  USING (table_schema, table_name, column_name)"
                 + "  ORDER BY c.table_name, c.ordinal_position";
         break;
       default:
@@ -153,7 +154,7 @@ class LocalReadSpannerSchema extends DoFn<Void, SpannerSchema> {
     switch (dialect) {
       case GOOGLE_STANDARD_SQL:
         statement =
-            "SELECT t.table_name, t.column_name, t.column_ordering"
+            "SELECT t.table_schema, t.table_name, t.column_name, t.column_ordering"
                 + " FROM information_schema.index_columns AS t "
                 + " WHERE t.index_name = 'PRIMARY_KEY'"
                 + " AND t.table_schema NOT IN ('information_schema', 'spanner_sys')"
@@ -161,7 +162,7 @@ class LocalReadSpannerSchema extends DoFn<Void, SpannerSchema> {
         break;
       case POSTGRESQL:
         statement =
-            "SELECT t.table_name, t.column_name, t.column_ordering"
+            "SELECT t.table_schema, t.table_name, t.column_name, t.column_ordering"
                 + " FROM information_schema.index_columns AS t "
                 + " WHERE t.index_name = 'PRIMARY_KEY'"
                 + " AND t.table_schema NOT IN ('information_schema', 'spanner_sys', 'pg_catalog')"

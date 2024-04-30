@@ -86,14 +86,17 @@ public class DdlToAvroSchemaConverter {
     Collection<Schema> schemas = new ArrayList<>();
 
     for (NamedSchema schema : ddl.schemas()) {
+      LOG.info("DdlToAvo Schema {}",schema.name());
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
           SchemaBuilder.record(schema.name()).namespace(this.namespace);
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);
       recordBuilder.prop(GOOGLE_STORAGE, "CloudSpanner");
       // Indicate that this is a "CREATE SCHEMA", not a table or a view.
       recordBuilder.prop(SPANNER_ENTITY, SPANNER_NAMED_SCHEMA);
+      schemas.add(recordBuilder.fields().endRecord());
     }
     for (Table table : ddl.allTables()) {
+      LOG.info("DdlToAvo Table {}",table.name());
       SchemaBuilder.RecordBuilder<Schema> recordBuilder =
           SchemaBuilder.record(table.name()).namespace(this.namespace);
       recordBuilder.prop(GOOGLE_FORMAT_VERSION, version);

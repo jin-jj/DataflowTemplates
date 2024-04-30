@@ -528,6 +528,17 @@ public class ImportTransform extends PTransform<PBegin, PDone> {
                                 newDdl.setOptionsStatements(spannerConfig.getDatabaseId().get()));
                           }
 
+                          if(!missingNamedSchemas.isEmpty()) {
+                            for(KV<String, Schema> kv: missingNamedSchemas) {
+                              Ddl.Builder builder = Ddl.builder(dialect);
+                              NamedSchema schema = converter.toSchema(kv.getKey(), kv.getValue());
+                              builder.addSchema(schema);
+                              mergedDdl.addSchema(schema);
+                              Ddl newDdl = builder.build();
+                              ddlStatements.addAll(newDdl.createNamedSchemaStatements());
+                            }
+                          }
+
                           // CREATE SEQUENCE statements have to be placed before
                           // table and view statements, since tables and views
                           // may use sequences.
@@ -544,14 +555,8 @@ public class ImportTransform extends PTransform<PBegin, PDone> {
 
                           if (!missingTables.isEmpty()
                               || !missingModels.isEmpty()
-                              || !missingViews.isEmpty()
-                              || !missingNamedSchemas.isEmpty()) {
+                              || !missingViews.isEmpty()) {
                             Ddl.Builder builder = Ddl.builder(dialect);
-                            for(KV<String, Schema> kv: missingNamedSchemas) {
-                              NamedSchema schema = converter.toSchema(kv.getKey(), kv.getValue());
-                              builder.addSchema(schema);
-                              mergedDdl.addSchema(schema);
-                            }
                             for (KV<String, Schema> kv : missingViews) {
                               com.google.cloud.teleport.spanner.ddl.View view =
                                   converter.toView(kv.getKey(), kv.getValue());
@@ -573,7 +578,6 @@ public class ImportTransform extends PTransform<PBegin, PDone> {
                               createForeignKeyStatements.addAll(table.foreignKeys());
                             }
                             Ddl newDdl = builder.build();
-                            ddlStatements.addAll(newDdl.createNamedSchemaStatements());
                             ddlStatements.addAll(newDdl.createTableStatements());
                             ddlStatements.addAll(newDdl.createModelStatements());
                             ddlStatements.addAll(newDdl.createViewStatements());
@@ -610,7 +614,7 @@ public class ImportTransform extends PTransform<PBegin, PDone> {
                           c.output(pendingChangeStreamsTag, createChangeStreamStatements);
 
                           LOG.info(
-                              "Applying DDL statements for tables, models and views: {}",
+                              "Applying DDL statements for schemas, tables, models and views: {}",
                               ddlStatements);
                           if (!ddlStatements.isEmpty()) {
                             DatabaseAdminClient databaseAdminClient =

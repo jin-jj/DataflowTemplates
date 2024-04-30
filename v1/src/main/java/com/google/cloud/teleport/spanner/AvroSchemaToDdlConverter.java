@@ -113,7 +113,7 @@ public class AvroSchemaToDdlConverter {
 
   public View toView(String viewName, Schema schema) {
     if (viewName == null) {
-      viewName = schema.getName();
+      viewName = schema.getFullName();
     }
     LOG.debug("Converting to Ddl viewName {}", viewName);
 
@@ -127,7 +127,7 @@ public class AvroSchemaToDdlConverter {
 
   public Model toModel(String modelName, Schema schema) {
     if (modelName == null) {
-      modelName = schema.getName();
+      modelName = schema.getFullName();
     }
     LOG.debug("Converting to Ddl modelName {}", modelName);
 
@@ -199,7 +199,7 @@ public class AvroSchemaToDdlConverter {
 
   public Sequence toSequence(String sequenceName, Schema schema) {
     if (sequenceName == null) {
-      sequenceName = schema.getName();
+      sequenceName = schema.getFullName();
     }
     LOG.debug("Converting to Ddl sequenceName {}", sequenceName);
     Sequence.Builder builder = Sequence.builder(dialect).name(sequenceName);
@@ -228,7 +228,7 @@ public class AvroSchemaToDdlConverter {
 
   public Table toTable(String tableName, Schema schema) {
     if (tableName == null) {
-      tableName = schema.getName();
+      tableName = schema.getFullName();
     }
     LOG.debug("Converting to Ddl tableName {}", tableName);
 

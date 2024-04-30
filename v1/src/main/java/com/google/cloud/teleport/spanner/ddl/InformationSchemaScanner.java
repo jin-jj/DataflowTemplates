@@ -965,6 +965,7 @@ public class InformationSchemaScanner {
             Statement.of(
                 "SELECT cs.change_stream_name,"
                     + " cs.all,"
+                    + " cst.table_schema, "
                     + " cst.table_name,"
                     + " cst.all_columns,"
                     + " ARRAY_AGG(csc.column_name) AS column_name_list"
@@ -980,8 +981,8 @@ public class InformationSchemaScanner {
                     + " AND cst.table_catalog = csc.table_catalog"
                     + " AND cst.table_schema = csc.table_schema"
                     + " AND cst.table_name = csc.table_name"
-                    + " GROUP BY cs.change_stream_name, cs.all, cst.table_name, cst.all_columns"
-                    + " ORDER BY cs.change_stream_name, cs.all, cst.table_name"));
+                    + " GROUP BY cs.change_stream_name, cs.all, cst.table_schema, cst.table_name, cst.all_columns"
+                    + " ORDER BY cs.change_stream_name, cs.all, cst.table_schema, cst.table_name"));
 
     Map<String, StringBuilder> allChangeStreams = Maps.newHashMap();
     while (resultSet.next()) {
@@ -990,14 +991,14 @@ public class InformationSchemaScanner {
           (dialect == Dialect.GOOGLE_STANDARD_SQL)
               ? resultSet.getBoolean(1)
               : resultSet.getString(1).equalsIgnoreCase("YES");
-      String tableName = resultSet.isNull(2) ? null : resultSet.getString(2);
+      String tableName = getQualifiedName(resultSet.getString(2), resultSet.getString(3));
       Boolean allColumns =
-          resultSet.isNull(3)
+          resultSet.isNull(4)
               ? null
               : (dialect == Dialect.GOOGLE_STANDARD_SQL
-                  ? resultSet.getBoolean(3)
-                  : resultSet.getString(3).equalsIgnoreCase("YES"));
-      List<String> columnNameList = resultSet.isNull(4) ? null : resultSet.getStringList(4);
+                  ? resultSet.getBoolean(4)
+                  : resultSet.getString(4).equalsIgnoreCase("YES"));
+      List<String> columnNameList = resultSet.isNull(5) ? null : resultSet.getStringList(5);
 
       StringBuilder forClause =
           allChangeStreams.computeIfAbsent(changeStreamName, k -> new StringBuilder());

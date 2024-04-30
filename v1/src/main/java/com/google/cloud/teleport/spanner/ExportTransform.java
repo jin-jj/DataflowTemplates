@@ -411,9 +411,7 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
                                     shouldExportTimestampAsLogicalType.get())
                                 .convert(c.element());
                         for (Schema schema : avroSchemas) {
-                          LOG.info("Build Avro schemas from DDL name:{},{}", schema.getFullName(), schema.toString());
-                          // TODO: avro also has named schema and space.
-                          c.output(KV.of(schema.getFullName(), new SerializableSchemaSupplier(schema)));
+                          c.output(KV.of(AvroUtil.getSpannerObjectName(schema), new SerializableSchemaSupplier(schema)));
                         }
                       }
                     }))
@@ -542,7 +540,7 @@ public class ExportTransform extends PTransform<PBegin, WriteFilesResult<String>
                   public void processElement(ProcessContext c) {
                     String namedSchema = c.element();
                     LOG.info("Exporting named schema: " + namedSchema);
-                    // This file will contain the schema definition for the sequence.
+                    // This file will contain the schema definition for the named schema.
                     c.output(
                         KV.of(
                             namedSchema,

@@ -20,6 +20,7 @@ import com.google.common.escape.Escaper;
 import com.google.common.escape.Escapers;
 import java.util.Arrays;
 import java.util.stream.Collectors;
+import kotlin.Pair;
 
 /**
  * Cloud Spanner Ddl utility components.
@@ -44,6 +45,18 @@ public class DdlUtils {
   public static final String POSTGRESQL_LITERAL_QUOTE = "'";
   public static final String GSQL_LITERAL_QUOTE = "\"";
 
+  // TODO: Is this Pair a good class to use?
+  public static Pair<String, String> splitName(String name, Dialect dialect) {
+    String[] paths = name.split("\\.");
+    if (paths.length == 1) {
+      return new Pair<>(dialect == Dialect.POSTGRESQL ? "public":"", paths[0]);
+    }
+    if (paths.length == 2) {
+      return new Pair<>(paths[0], paths[1]);
+    }
+    throw new IllegalArgumentException(
+        String.format("Name format is wrong %s, it should be {schema}.{object} or {object}", name));
+  }
   public static String quoteIdentifier(String name, Dialect dialect) {
     String quote = identifierQuote(dialect);
     return Arrays.stream(name.split("\\.")).map(s -> quote + s + quote)
@@ -51,7 +64,7 @@ public class DdlUtils {
   }
 
   public static String getQualifiedName(String schemaName, String shortName) {
-    if (schemaName.isEmpty() || schemaName.equals("public") || shortName == null) {
+    if (schemaName == null || schemaName.isEmpty() || schemaName.equals("public")) {
       return shortName;
     }
     return schemaName + "." + shortName;
